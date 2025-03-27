@@ -24,7 +24,7 @@ for (const folder of commandFolders) {
 	}
 }
 
-const rest = new REST().setToken(process.env.TEST_TOKEN);
+const rest = new REST().setToken(process.env.BOT_TOKEN);
 
 (async () => {
 	try {
