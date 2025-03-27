@@ -1,10 +1,10 @@
+import path from 'path';
+import fs from 'fs';
+import { pathToFileURL } from 'url';
 import { config } from "dotenv";
-import { Client, IntentsBitField } from "discord.js";
+import { Client, IntentsBitField, Collection } from "discord.js";
 
 config();
-const wait = async (time) => {
-    await new Promise(resolve => setTimeout(resolve, time));
-};
 
 const client = new Client({
 	intents: [
@@ -15,34 +15,36 @@ const client = new Client({
 	],
 });
 
-client.on("messageCreate", async (message) => {
-	if (message.author !== message.author.bot && message.mentions.has(client.user)) {
-        console.log(client.user.id)
-		const cardName = message.content.replace(/<@!?&?(\d+)>/g, "").trim().replaceAll(" ", "-");
-        await wait(400);
-        console.log(cardName);
-		const card = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${cardName}`);
-        if (card.status === 404) {
-            message.channel.send('Search too vague or that card isn\'t real, man!')
-        } else {
-            message.channel.send(`${card.headers.get("x-scryfall-card-image")} \n${card.headers.get("x-scryfall-card")}`);
-        }
-	}
-});
+client.commands = new Collection();
 
-client.on("messageUpdate", async (_, new_message) => {
-	if (new_message.author !== new_message.author.bot && new_message.mentions.has(client.user)) {
-        console.log(client.user.id)
-        const cardName = new_message.content.replace(/<@!?&?(\d+)>/g, "").trim().replaceAll(" ", "-");
-        await wait(400);
-        console.log(cardName);
-        const card = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${cardName}`);
-        if (card.status === 404) {
-            new_message.channel.send('Seriously, are you sure you know what card you want?');
-        } else {
-            new_message.channel.send(`${card.headers.get("x-scryfall-card-image")} \n${card.headers.get("x-scryfall-card")}`);
-        }
-	}
-});
+const foldersPath = path.join(import.meta.dirname, 'commands');
+const commandFolders = fs.readdirSync(foldersPath);
 
-client.login(process.env.BOT_TOKEN);
+for (const folder of commandFolders) {
+	const commandsPath = path.join(foldersPath, folder);
+	const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+	for (const file of commandFiles) {
+		const filePath = path.join(commandsPath, file);
+		const command = (await import(pathToFileURL(filePath))).default;
+		if ('data' in command && 'execute' in command) {
+			client.commands.set(command.data.name, command);
+		} else {
+			console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+		}
+	}
+}
+
+const eventsPath = path.join(import.meta.dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+
+for (const file of eventFiles) {
+    const filePath = path.join(eventsPath, file);
+    const event = (await import(pathToFileURL(filePath))).default;
+    if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args));
+    } else {
+        client.on(event.name, (...args) => event.execute(...args));
+    }
+}
+
+client.login(process.env.TEST_TOKEN);
